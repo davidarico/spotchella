@@ -1,24 +1,38 @@
 /**
  * Public site origin for OAuth. Prefer `AUTH_URL`, then `NEXTAUTH_URL`.
+ * On Vercel, if neither is set, `VERCEL_URL` is set (host only, no scheme) — use `https://…`
+ * so production OAuth `redirect_uri` is not the local-dev default `http://127.0.0.1:3000`.
  * Do not mirror these via `next.config` `env` (build-time inlining can wrong-foot runtime).
  */
 export function getPublicAppOrigin() {
   const raw = process.env.AUTH_URL || process.env.NEXTAUTH_URL;
-  if (!raw) {
-    return "http://127.0.0.1:3000";
+  if (raw) {
+    let u: URL;
+    try {
+      u = new URL(raw);
+    } catch {
+      return fallbackOrigin();
+    }
+    // Spotify: many people register 127.0.0.1 in the dev dashboard but leave `localhost` in `.env`
+    // — those are different OAuth hosts. Unless opted out, normalize localhost → loopback IP.
+    if (u.hostname === "localhost" && process.env.AUTH_PRESERVE_LOCALHOST !== "true") {
+      u.hostname = "127.0.0.1";
+    }
+    return u.origin;
   }
-  let u: URL;
-  try {
-    u = new URL(raw);
-  } catch {
-    return "http://127.0.0.1:3000";
+  const vercel = process.env.VERCEL_URL;
+  if (vercel) {
+    try {
+      return new URL(`https://${vercel}`).origin;
+    } catch {
+      /* fall through */
+    }
   }
-  // Spotify: many people register 127.0.0.1 in the dev dashboard but leave `localhost` in `.env`
-  // — those are different OAuth hosts. Unless opted out, normalize localhost → loopback IP.
-  if (u.hostname === "localhost" && process.env.AUTH_PRESERVE_LOCALHOST !== "true") {
-    u.hostname = "127.0.0.1";
-  }
-  return u.origin;
+  return fallbackOrigin();
+}
+
+function fallbackOrigin() {
+  return "http://127.0.0.1:3000";
 }
 
 /**
