@@ -1,0 +1,133 @@
+// Spotchella — PostgreSQL + Auth.js
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  displayName   String?   @map("display_name")
+  spotifyId     String?   @unique @map("spotify_id")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  accounts       Account[]
+  sessions       Session[]
+  authenticators Authenticator[]
+  rankings       UserArtistRanking[]
+  lineups        GeneratedLineup[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String   @id @default(cuid())
+  userId            String   @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String   @map("provider_account_id")
+  refresh_token     String?  @db.Text
+  access_token      String?  @db.Text
+  expires_at        Int?     @map("expires_at")
+  token_type        String?  @map("token_type")
+  scope             String?  @db.Text
+  id_token          String?  @db.Text
+  session_state     String?  @map("session_state")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "Session_userId_idx")
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+  @@map("verification_tokens")
+}
+
+// Required by @auth/prisma-adapter (WebAuthn; unused in Spotchella)
+model Authenticator {
+  credentialID         String  @unique
+  userId               String
+  providerAccountId    String
+  credentialPublicKey  String
+  counter              Int
+  credentialDeviceType String
+  credentialBackedUp   Boolean
+  transports           String?
+  user                 User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, credentialID])
+  @@map("authenticators")
+}
+
+model Artist {
+  id        String   @id @default(cuid())
+  spotifyId String   @unique @map("spotify_id")
+  name      String
+  imageUrl  String?  @map("image_url")
+  genres    String[]
+
+  rankings UserArtistRanking[]
+
+  @@map("artists")
+}
+
+model UserArtistRanking {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  artistId  String   @map("artist_id")
+  rank      Int
+  score     Float
+  locked    Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artist Artist @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, artistId])
+  @@index([userId, rank], map: "user_ranking_order")
+  @@map("user_artist_rankings")
+}
+
+model GeneratedLineup {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  lineupJson Json     @map("lineup_json")
+  shareSlug  String   @unique @default(cuid()) @map("share_slug")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "lineup_by_user")
+  @@map("generated_lineups")
+}
