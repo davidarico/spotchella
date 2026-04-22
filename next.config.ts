@@ -6,6 +6,11 @@ import type { NextConfig } from "next";
  * Set `AUTH_URL` and `NEXTAUTH_URL` in `.env` only, then restart `next dev`.
  */
 const nextConfig: NextConfig = {
+  /** @see https://nextjs.org/docs/app/api-reference/config/next-config-js/alloweddevorigins */
+  allowedDevOrigins: [
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
+  ],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "i.scdn.co", pathname: "/**" },

@@ -3,7 +3,7 @@ import type { NextAuthConfig } from "next-auth";
 import Spotify from "next-auth/providers/spotify";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 
-import { getAuthProxyBaseForSpotify } from "@/lib/app-origin";
+import { getAuthProxyBaseForSpotify, getPublicAppOrigin } from "@/lib/app-origin";
 import { prisma } from "@/lib/prisma";
 
 const scopes = [
@@ -43,6 +43,43 @@ function createAuthConfig(): NextAuthConfig {
     trustHost: true,
     pages: { signIn: "/" },
     callbacks: {
+      /**
+       * The default `redirect` compares `url` to `baseUrl` from the **current** request. After
+       * OAuth, `callbackUrl` in the cookie is sometimes a full `http://localhost:3000/...` URL
+       * while `AUTH_URL` is `http://127.0.0.1:3000` — the default would drop the path to `/`
+       * and send the browser to a host where the session cookie (set on 127) is missing.
+       */
+      redirect({ url, baseUrl }) {
+        const canonical = getPublicAppOrigin().replace(/\/$/, "");
+        let can: URL;
+        try {
+          can = new URL(`${canonical}/`);
+        } catch {
+          return baseUrl;
+        }
+        if (url.startsWith("/")) {
+          return new URL(url, can).href;
+        }
+        let u: URL;
+        try {
+          u = new URL(url);
+        } catch {
+          return baseUrl;
+        }
+        if (u.origin === can.origin) {
+          return url;
+        }
+        const loopback =
+          (u.hostname === "localhost" && can.hostname === "127.0.0.1") ||
+          (u.hostname === "127.0.0.1" && can.hostname === "localhost");
+        if (loopback && (u.port === can.port || u.port === "")) {
+          return new URL(u.pathname + u.search + u.hash, can).href;
+        }
+        if (u.origin === new URL(baseUrl).origin) {
+          return url;
+        }
+        return baseUrl;
+      },
       async signIn({ user, account, profile }) {
         if (user.id && account?.provider === "spotify") {
           const spotifyId = account.providerAccountId;
